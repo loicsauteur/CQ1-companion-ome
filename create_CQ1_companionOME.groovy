@@ -28,7 +28,6 @@ import ome.xml.model.primitives.NonNegativeInteger
 #@File(label = "Select the CQ1 ome.tif", style = "file") in_file
 #@String(label = "Name your experiment", value = "SampleX_PlateY") exp_name
 
-
 main()
 
 def main() {
@@ -65,7 +64,6 @@ def main() {
     write_companion(ome_new, in_file, exp_name)
 }
 
-
 /**
  * Checks all the images available and creates wells,
  * wellSamples according to the image entries
@@ -75,86 +73,57 @@ def main() {
  * @param ome_new = new OME store
  * @param ome_ori = original OME store (i.e. read from the ome.tif file)
  */
-def addImagesAndWells(Plate plate, Instrument instrument, OME ome_new, OME ome_ori) {
+def addImagesAndWells(Plate plate, Instrument instrument, OME ome_new, OME ome_ori){
     plateID = plate.getID().split(":")[1] as Integer
-    wellID = 0
-    wellSampleID = 0
-    imageID = 0
-    //index = 1
-    prev_row = ""
-    prev_col = ""
+    well_counter = 0
+    image_counter = 0  // 1:1 mapping with wellSampleID
+    wellID_map = [:]  // dictionary for well_ids
+    well_map = [:]  // dictionary for well objects
 
     for (i in 0..<ome_ori.sizeOfImageList()) {
         image = ome_ori.getImage(i)
         if (image.getName() != "TitleImage") { // to skip the TitleImage
             name = image.getName()
-            well = name.split(",")[1]
             fov = name.split(",")[2]
             name.split("")
             row = name.split("\\(R")[1].split("C")[0]
             col = name.split("\\(")[1].split("\\),")[0].split("C")[1]
-            if (prev_row == "") prev_row = row
-            if (prev_col == "") prev_col = col
-            println("well=$well, fov=$fov, row=$row, col=$col")
+            wellkey = "$row $col"
 
             // reset the ImageID and link instrument
-            image.setID("Image:$imageID")
+            image.setID("Image:$image_counter")
             image.linkInstrument(instrument)
 
-            // for the first entry
-            if (imageID == 0) {
-                // create new well (for plate)
+            if(wellID_map[wellkey] == null){ // If we haven't created that well before
                 well_new = new Well()
                 well_new.setColumn(new NonNegativeInteger(col as Integer))
                 well_new.setRow(new NonNegativeInteger(row as Integer))
-                well_new.setID("Well:$plateID:$wellID")
+                well_new.setID("Well:$plateID:$well_counter")
 
-                // create new WellSample
-                sample_new = new WellSample()
-                sample_new.setID("WellSample:$plateID:$wellID:$imageID")
-                sample_new.linkImage(image)
-                well_new.addWellSample(sample_new)
+                well_map[(wellkey)] = well_new
+                wellID_map[(wellkey)] = well_counter
 
-                // increment the wellsample counter and imageId counter
-                imageID++
-                wellSampleID++
+                plate.addWell(well_new)
+                well_counter++;
             }
-            else {
-                // create new well sample
-                sample_new = new WellSample()
-                sample_new.setID("WellSample:$plateID:$wellID:$imageID")
-                sample_new.linkImage(image)
-                // increment the wellsample counter and imageID counter
-                imageID++
-                wellSampleID++
-                // check if it is the same well
-                if (prev_row == row && prev_col == col) {
-                    well_new.addWellSample(sample_new)
-                }
-                else {
-                    // respecify the previous row and col indentifies
-                    prev_row = row
-                    prev_col = col
-                    // add the previous well to the plate, and increment counter
-                    plate.addWell(well_new)
-                    wellID++
-                    // create new well
-                    well_new = new Well()
-                    well_new.setColumn(new NonNegativeInteger(col as Integer))
-                    well_new.setRow(new NonNegativeInteger(row as Integer))
-                    well_new.setID("Well:$plateID:$wellID")
-                    // add the wellsample
-                    well_new.addWellSample(sample_new)
 
-                }
-            }
-            println("\twell: $wellID, wellsample: $wellSampleID, imageID: $imageID")
+            wellID = wellID_map[wellkey]
+            well = well_map[wellkey]
+            println("well=$wellID, fov=$fov, row=$row, col=$col")
+
+            // create new WellSample
+            sample_new = new WellSample()
+            sample_new.setID("WellSample:$plateID:$wellID:$image_counter")
+            sample_new.linkImage(image)
+            well.addWellSample(sample_new)
+
+            println("\twell: $wellID, wellsample: $image_counter, imageID: $image_counter")
             ome_new.addImage(image)
+
+            // increment the imageId counter
+            image_counter++
         }
     }
-    // add the last well to the plate
-    plate.addWell(well_new)
-
 }
 
 
